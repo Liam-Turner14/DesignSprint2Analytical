@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Genre Crossfilter</title>
+<title>Genre Popularity</title>
 <style>
-  /* Deliberately one plain light look, modelled on square.github.io/crossfilter */
+  /* Taken from square.github.io/crossfilter */
   :root { color-scheme: light; --bg: #fff; --fg: #333; --muted: #777; }
   body { background: var(--bg); color: var(--fg); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 14px; }
   .wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 48px; }
@@ -19,9 +19,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Genre Crossfilter</h1>
-  <p>Drag across the artist-count chart to filter both line charts by release year; double-click it to clear. Hover a point on a line to see its values. Pick a year below the lines to compare each genre with the year before.</p>
-  <p id="source">Loading music.csv…</p>
+  <h1>Genre Popularity</h1>
+  <p id="source"></p>
   <div id="vis"></div>
   <div id="yearPicker"></div>
   <div id="bars"></div>
@@ -104,7 +103,7 @@ function buildSpec(rows) {
 
   // Sheet 2: unique artists per genre per year (each artist counted once per year)
   const artistCount = genreLines(
-    "Unique artists per genre by release year  (Sheet 2)  ·  drag to filter by year",
+    "Unique artists per genre by release year",
     [ { filter: "isValid(datum.year)" },
       { aggregate: [{ op: "distinct", field: "artist", as: "artists" }], groupby: ["genre", "year"] } ],
     { field: "artists", type: "quantitative", title: "Unique artists", axis: { tickCount: 4 } },
@@ -114,7 +113,7 @@ function buildSpec(rows) {
   // Sheet 3: average artist.hotttnesss per genre per year
   // (average per artist first, so an artist with many songs still counts once)
   const artistHotness = genreLines(
-    "Average artist popularity (artist.hotttnesss) per genre by release year  (Sheet 3)",
+    "Average artist popularity (artist.hotttnesss) per genre by release year",
     [ { filter: "isValid(datum.year) && isValid(datum.artistPop)" },
       { aggregate: [{ op: "mean", field: "artistPop", as: "artistPop" }], groupby: ["genre", "year", "artist"] },
       { aggregate: [{ op: "mean", field: "artistPop", as: "hotness" }], groupby: ["genre", "year"] } ],
@@ -131,7 +130,7 @@ function buildSpec(rows) {
   const yBar = { field: "genre", type: "nominal", sort: genreOrder, title: null, scale: { domain: genreOrder },
                  axis: { ticks: false, domain: false, labelColor: "#333", labelFontSize: 11, labelLimit: 220 } };
   const yearBars = {
-    title: { text: { expr: "'Unique artists per genre in ' + pickYear + ' vs. ' + (pickYear - 1) + '  (Sheet 2)'" } },
+    title: { text: { expr: "'Unique artists per genre in ' + pickYear + ' vs. ' + (pickYear - 1)" } },
     width: 640, height: { step: 24 },
     transform: [
       { filter: "datum.year === pickYear || datum.year === pickYear - 1" },
@@ -208,9 +207,6 @@ fetch("music.csv")
   .then(text => {
     const rows = prepare(vega.read(text, { type: "csv", parse: "auto" }));
     const noYear = rows.filter(r => !r.year).length;
-    document.getElementById("source").textContent =
-      "music.csv · " + rows.length.toLocaleString() + " songs · " + noYear.toLocaleString() +
-      " have no release year (stored as 0), so they are left out of every chart.";
     const { main, bars } = buildSpec(rows);
     return Promise.all([
       vegaEmbed("#vis", main, { actions: false, renderer: "svg" }),
