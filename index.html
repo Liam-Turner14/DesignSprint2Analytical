@@ -49,6 +49,8 @@ const BUCKETS = [
   ["Rock",           /rock|punk|grunge|indie|emo|hardcore|new wave|shoegaze|post-|psychedelic|surf|rockabilly|mod\b|screamo|\boi\b|freakbeat/],
 ];
 const broadGenre = t => { t = String(t || "").toLowerCase(); for (const [g, re] of BUCKETS) if (re.test(t)) return g; return "Other"; };
+const FIRST_YEAR = 1955;   // songs released before this are left out
+const KEEP_GENRES = ["Pop", "Rock", "Country / Folk", "Hip hop", "Jazz / Blues"];
 
 function prepare(raw) {
   const pos = v => (typeof v === "number" && v > 0) ? v : null;   // 0 / blank -> missing
@@ -63,13 +65,11 @@ function prepare(raw) {
   const n = {}; rows.forEach(r => n[r.genre] = (n[r.genre] || 0) + 1);
   const keep = new Set(Object.keys(n).filter(g => g !== "Other").sort((a, b) => n[b] - n[a]).slice(0, 8));
   rows.forEach(r => { if (!keep.has(r.genre)) r.genre = "Other"; });
-  return rows;
-}
+  return rows.filter(r => (r.year === null || r.year >= FIRST_YEAR) && KEEP_GENRES.includes(r.genre));}
 
 /* ---------- 2. THE SPEC: every chart filters by every brush ---------- */
 const GREY = "#ccc", BLUE = "#4682b4";
-const PARAMS = ["brushYear"];
-const ALL_FILTERS = { and: PARAMS.map(p => ({ param: p })) };   // an empty brush lets everything through
+const ALL_FILTERS = "true";   // no filtering: every chart shows all songs
 // one fixed color per genre, assigned in order (never re-colored when filters change)
 const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
 
@@ -108,7 +108,7 @@ function buildSpec(rows) {
       { aggregate: [{ op: "distinct", field: "artist", as: "artists" }], groupby: ["genre", "year"] } ],
     { field: "artists", type: "quantitative", title: "Unique artists", axis: { tickCount: 4 } },
     { field: "artists", title: "Unique artists" },
-    "brushYear");
+    null);
 
   // Sheet 3: average artist.hotttnesss per genre per year
   // (average per artist first, so an artist with many songs still counts once)
@@ -190,7 +190,6 @@ function buildSpec(rows) {
     $schema: "https://vega.github.io/schema/vega-lite/v5.json",
     data: { values: rows },
     vconcat: [
-      countLine,
       artistCount,
       artistHotness,
     ],
