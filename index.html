@@ -110,14 +110,14 @@ function buildSpec(rows) {
     { field: "artists", title: "Unique artists" },
     null);
 
-  // Sheet 3: average artist.hotttnesss per genre per year
-  // (average per artist first, so an artist with many songs still counts once)
+  // Sheet 3: Median artist.hotttnesss per genre per year
+  // (Average per artist first, so an artist with many songs still counts once)
   const artistHotness = genreLines(
-    "Average artist popularity (artist.hotttnesss) per genre by release year",
+    "Median artist popularity (artist.hotttnesss) per genre by release year",
     [ { filter: "isValid(datum.year) && isValid(datum.artistPop)" },
       { aggregate: [{ op: "mean", field: "artistPop", as: "artistPop" }], groupby: ["genre", "year", "artist"] },
-      { aggregate: [{ op: "mean", field: "artistPop", as: "hotness" }], groupby: ["genre", "year"] } ],
-    { field: "hotness", type: "quantitative", title: "Average artist.hotttnesss", scale: { domain: [0, 1] }, axis: { format: ".1f", tickCount: 5 } },
+      { aggregate: [{ op: "median", field: "artistPop", as: "hotness" }], groupby: ["genre", "year"] } ],
+    { field: "hotness", type: "quantitative", title: "Median artist.hotttnesss", scale: { domain: [0, 1] }, axis: { format: ".1f", tickCount: 5 } },
     { field: "hotness", title: "Avg. artist.hotttnesss", format: ".3f" },
     null);
 
