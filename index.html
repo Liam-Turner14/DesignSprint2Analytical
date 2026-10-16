@@ -15,11 +15,16 @@
   #vis, #bars { overflow-x: auto; }
   #yearPicker { margin: 32px 0 10px; font-size: 13px; }
   #yearPicker select { font: inherit; font-size: 13px; padding: 3px 6px; margin-left: 4px; }
+  #yearPicker { display: flex; flex-wrap: wrap; gap: 24px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Genre Popularity</h1>
+  <p>This dashboard compares how five genres (Pop, Rock, Country / Folk, Hip hop and Jazz / Blues) are represented across release years in a 10,000-song 
+    sample of the Million Song Dataset, and how popular their artists are. The top chart counts the unique artists in each genre per year. 
+    The middle chart shows each genre's median artist.hotttnesss. The bar chart compares a selected year with the year before. 
+    Hover over a point on either line chart to see its exact values. Popularity scores reflect December 2010 rather than popularity at the time of release.</p>
   <p id="source"></p>
   <div id="vis"></div>
   <div id="yearPicker"></div>
@@ -110,8 +115,8 @@ function buildSpec(rows) {
     { field: "artists", title: "Unique artists" },
     null);
 
-  // Sheet 3: Median artist.hotttnesss per genre per year
-  // (Average per artist first, so an artist with many songs still counts once)
+  // Sheet 3: average artist.hotttnesss per genre per year
+  // (average per artist first, so an artist with many songs still counts once)
   const artistHotness = genreLines(
     "Median artist popularity (artist.hotttnesss) per genre by release year",
     [ { filter: "isValid(datum.year) && isValid(datum.artistPop)" },
@@ -121,35 +126,40 @@ function buildSpec(rows) {
     { field: "hotness", title: "Avg. artist.hotttnesss", format: ".3f" },
     null);
 
-  // Sheet 2, option 2: one bar per genre for the year picked in the dropdown,
-  // a dashed "ghost bar" for the year before, and an arrow for the direction of change
+  // Sheet 2, option 2 (double bars): for each genre, one bar for the "From" year
+  // and one for the "To" year, with an arrow showing the change between them
   const songsPerYear = {}; rows.forEach(r => { if (r.year) songsPerYear[r.year] = (songsPerYear[r.year] || 0) + 1; });
   const yearOptions = Object.keys(songsPerYear).map(Number).sort((a, b) => a - b);
   const startYear = yearOptions.reduce((a, b) => songsPerYear[b] > songsPerYear[a] ? b : a);  // busiest year
-  const xBar = { type: "quantitative", title: "Unique artists", axis: { tickMinStep: 1 } };
+  const fromYear = yearOptions[Math.max(0, yearOptions.indexOf(startYear) - 1)];             // the year before it
   const yBar = { field: "genre", type: "nominal", sort: genreOrder, title: null, scale: { domain: genreOrder },
                  axis: { ticks: false, domain: false, labelColor: "#333", labelFontSize: 11, labelLimit: 220 } };
   const yearBars = {
-    title: { text: { expr: "'Unique artists per genre in ' + pickYear + ' vs. ' + (pickYear - 1)" } },
-    width: 640, height: { step: 24 },
+    title: { text: { expr: "'Unique artists per genre: ' + yearA + ' vs. ' + yearB + '  (Sheet 2)'" } },
+    width: 640, height: { step: 14 },
     transform: [
-      { filter: "datum.year === pickYear || datum.year === pickYear - 1" },
+      { filter: "datum.year === yearA || datum.year === yearB" },
       { aggregate: [{ op: "distinct", field: "artist", as: "artists" }], groupby: ["genre", "year"] },
-      { calculate: "datum.year === pickYear ? 'cur' : 'prev'", as: "period" },
-      { pivot: "period", value: "artists", groupby: ["genre"] },                        // -> cur, prev per genre
-      { calculate: "isValid(datum.cur) ? datum.cur : 0", as: "cur" },
-      { calculate: "isValid(datum.prev) ? datum.prev : 0", as: "prev" },
-      { calculate: "datum.cur > datum.prev ? 'up' : datum.cur < datum.prev ? 'down' : 'same'", as: "dir" },
-      { calculate: "(datum.dir === 'up' ? '▲ ' : datum.dir === 'down' ? '▼ ' : '= ') + datum.cur", as: "label" },
-      { calculate: "max(datum.cur, datum.prev)", as: "labelX" },
+      { calculate: "datum.year === yearA ? 'A' : 'B'", as: "period" },
+      { pivot: "period", value: "artists", groupby: ["genre"] },                         // -> A, B per genre
+      { calculate: "isValid(datum.A) ? datum.A : 0", as: "A" },
+      { calculate: "yearA === yearB ? datum.A : (isValid(datum.B) ? datum.B : 0)", as: "B" },
+      { calculate: "datum.B > datum.A ? 'up' : datum.B < datum.A ? 'down' : 'same'", as: "dir" },
+      { calculate: "datum.A + ' → ' + datum.B + (datum.dir === 'up' ? '  ▲' : datum.dir === 'down' ? '  ▼' : '  =')", as: "label" },
+      { calculate: "max(datum.A, datum.B)", as: "labelX" },
     ],
     encoding: { y: yBar },
     layer: [
-      { mark: { type: "bar", fillOpacity: 0, stroke: "#888", strokeDash: [3, 2], strokeWidth: 1.2, height: { band: 0.8 } },
-        encoding: { x: { field: "prev", ...xBar } } },                                    // ghost bar: previous year
-      { mark: { type: "bar", height: { band: 0.5 } },
-        encoding: { x: { field: "cur", type: "quantitative" }, color: { ...genreColor, legend: null } } },  // this year
-      { mark: { type: "text", align: "left", dx: 6, fontSize: 11 },
+      { transform: [{ fold: ["A", "B"], as: ["which", "count"] }],                     // one row per bar
+        mark: { type: "bar", height: { band: 0.85 } },
+        encoding: {
+          x: { field: "count", type: "quantitative", title: "Unique artists", axis: { tickMinStep: 1 } },
+          yOffset: { field: "which", type: "nominal", scale: { domain: ["A", "B"] } },  // puts the two bars side by side
+          color: { ...genreColor, legend: { offset: 50 } },   // offset leaves room for the arrow labels
+          opacity: { field: "which", type: "nominal", scale: { domain: ["A", "B"], range: [0.4, 1] },
+                     legend: { title: null, orient: "top", direction: "horizontal",
+                               labelExpr: "datum.label === 'A' ? 'Lighter bar: ' + yearA : 'Darker bar: ' + yearB" } } } },
+      { mark: { type: "text", align: "left", dx: 6, fontSize: 11 },                    // arrow + numbers
         encoding: { x: { field: "labelX", type: "quantitative" }, text: { field: "label" },
           color: { field: "dir", type: "nominal", legend: null,
                    scale: { domain: ["up", "down", "same"], range: ["#1d7a3e", "#c03b3a", "#777"] } } } },
@@ -181,8 +191,12 @@ function buildSpec(rows) {
   // the bar chart is a separate spec so its year dropdown can sit right above it
   const bars = {
     $schema: schema, data: { values: rows }, config,
-    params: [{ name: "pickYear", value: startYear,
-               bind: { input: "select", options: yearOptions, name: "Release year ", element: "#yearPicker" } }],
+    params: [
+      { name: "yearA", value: fromYear,
+        bind: { input: "select", options: yearOptions, name: "From year ", element: "#yearPicker" } },
+      { name: "yearB", value: startYear,
+        bind: { input: "select", options: yearOptions, name: "To year ", element: "#yearPicker" } },
+    ],
     ...yearBars,
   };
 
@@ -194,6 +208,7 @@ function buildSpec(rows) {
       artistHotness,
     ],
     spacing: 28,
+    resolve: { legend: { color: "independent" } },   // one genre legend beside each line chart
     config,
   };
   return { main, bars };
